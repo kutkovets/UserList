@@ -1,27 +1,18 @@
-const setCookie = (name, value, options = {}) => {
-    options = {path: '/', ...options};
-    if (options.expires instanceof Date) options.expires = options.expires.toUTCString();
-    let updatedCookie = encodeURIComponent(name) + "=" + encodeURIComponent(value);
-    for (let optionKey in options) {
-        updatedCookie += "; " + optionKey;
-        let optionValue = options[optionKey];
-        if (optionValue !== true) updatedCookie += "=" + optionValue;
-    }
-    document.cookie = updatedCookie;
-};
+import {notification} from 'antd';
+
 const ls = {
-    g: (key, p = false) => {
+    get: (key, p = false) => {
         const ls = localStorage.getItem(key);
         if (ls && ls.length) return p ? JSON.parse(ls) : ls;
         return null;
     },
-    s: (key, value, s = false) => {
+    set: (key, value, s = false) => {
         localStorage.setItem(key, s
             ? JSON.stringify(value)
             : value
         );
     },
-    r: (key) => {
+    remove: (key) => {
         key.constructor === [].constructor
             ? key.forEach(it => localStorage.removeItem(it))
             : localStorage.removeItem(key)
@@ -44,26 +35,29 @@ const ls = {
             else if (keys.includes(k)) delete ls[k];
             localStorage.setItem(key, JSON.stringify(ls))
         }
+    }
+};
+const is = {
+    Request: ({res} = {}) => {
+        const {status, data} = res;
+        return status
+            ? status === 200 && data
+            : false
     },
-    reset: () => ["cb", "phone"].forEach(it => localStorage.removeItem(it))
-
+    Success: ({res} = {}) => ((res || {}).status || -1) === 200
 };
-const getParams = () => {
+
+const makeAlert = obj => {
     const
-        params = {},
-        pathname = window.location.href.replace(window.location.origin, ""),
-        queries = pathname.split("?"),
-        query = queries[queries.length - 1].replace(window.location.pathname, "")
+        message = obj.status === 200
+            ? "Success"
+            : "Error",
+        description = obj.message || obj.error || ""
     ;
-    query
-        .split("&")
-        .forEach(it => {
-            const arr = it.split('=');
-            params[arr[0]] = arr[1];
-        });
-    return params;
+    notification.open({message, description});
+    return obj;
 };
 
-export const Cookie = setCookie;
-export const L = ls;
-export const Param = getParams;
+export const LS = ls;
+export const IS = is;
+export const Alert = makeAlert;

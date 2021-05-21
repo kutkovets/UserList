@@ -1,123 +1,110 @@
 import React from 'react';
 import 'antd/dist/antd.css';
+import axios from 'axios';
 import {GlobalContext} from "./context/global";
 import {env, themeConf} from './settings/config'
-import {StateReducer} from "./assets/utils/reducers";
-import {L} from "./assets/utils/utils";
-import {Layout, Menu, Breadcrumb, PageHeader, Switch} from 'antd';
-import {
-    DesktopOutlined,
-    PieChartOutlined,
-    FileOutlined,
-    TeamOutlined,
-    UserOutlined,
-} from '@ant-design/icons';
+import {userListReducer} from "./assets/reduce/UserList/reducers";
+import {userListState} from "./assets/reduce/UserList/states"
+import {LS, IS, Alert} from "./assets/utils/utils";
+import {Layout, PageHeader, Button, Skeleton} from 'antd';
+import {PlusOutlined, SyncOutlined} from '@ant-design/icons';
+import UserList from "./components/Table.js"
+import UserForm from "./components/EUserForm.js"
 
-const {Header, Content, Footer, Sider} = Layout;
-const {SubMenu} = Menu;
-
-
-const initState = {
-    weiting: false,
-};
+const {Content, Footer} = Layout;
+const {__DEV__} = env;
 
 export default function App() {
 
     const [global, setGlobal] = React.useState();
-    const [state, setState] = React.useReducer(StateReducer, initState);
+    const [state, setState] = React.useReducer(userListReducer, userListState);
 
     const makeGlobal = obj => setGlobal(global ? {...global, ...obj} : {...obj});
-    env.__DEV__ && console.log({state, global, env});
+    __DEV__ && console.log({state, global, env});
 
-    const menuOptions = [
-        {title: "Option 1", icon: <PieChartOutlined/>},
-        {title: "Option 2", icon: <DesktopOutlined/>},
-        {
-            title: "User", icon: <UserOutlined/>, options: [
-                {title: "Tom"},
-                {title: "Bill"},
-                {title: "Alex"},
-            ]
-        },
-        {
-            title: "Team", icon: <TeamOutlined/>, options: [
-                {title: "Team1"},
-                {title: "Team2"},
-            ]
-        },
-        {title: "FIles", icon: <FileOutlined/>}
-    ];
+    const Fetch = () => axios.get(env.apiUrl + "users")
+        .then(res => {
+            if (IS.Request({res})) setState({type: "userList", val: res.data});
+            else {
+                Alert(res);
+                setState({type: "userList", val: []});
+            }
+        })
+        .catch(Alert);
 
-    global || makeGlobal({
+    const Remove = () => axios.delete(env.apiUrl + "user/" + state.deleteItem.id)
+        .then(res => {
+            if (IS.Success({res})) {
+                Alert({
+                    status: 200,
+                    message: `User "${state.deleteItem.name || state.deleteItem.surname || state.deleteItem.desc}" is deleted`
+                });
+                setState({type: "reset", default: userListState});
+            }
+            else Alert(res)
+        })
+        .catch(Alert);
+
+
+    !!global || makeGlobal({
         locale: "ua",
-        theme: (L.g("lic", true) || {}).theme || themeConf.theme,
-        collapsed: false
+        theme: (LS.get("lic", true) || {}).theme || themeConf.theme
     });
 
-    const changeTheme = () => {
-        const theme = global.theme === "dark" ? "light" : "dark";
-        setGlobal({theme});
-        L.add("lic", {theme});
-    };
+    React.useEffect(() => {
+        if (global && !state.userList) setTimeout(() => Fetch(), 1000);
+        if (global && state.deleteItem && state.deleteItem.id) Remove();
+    }, [global, state]);
 
-    return <GlobalContext.Provider value={{global, setGlobal: makeGlobal}}>
+    return <GlobalContext.Provider
+        value={{global, setGlobal: makeGlobal}}
+    >
         {
             global &&
             <Layout style={{minHeight: '100vh'}}>
-                <Sider
-                    collapsible
-                    collapsed={global.collapsed}
-                    onCollapse={() => setGlobal({collapsed: !global.collapsed})}
-                    theme={global.theme}
-                >
-                    <div className="logo"/>
-                    {
-                        !!menuOptions.length &&
-                        <Menu defaultSelectedKeys={['1']} mode="inline" theme={global.theme}>
-                            {
-                                menuOptions.map((option, i) => {
-                                    const {options, icon, title} = option;
-                                    return options && options.length
-                                        ? <SubMenu key={i} icon={icon || null} title={title}>
-                                            {
-                                                options.map((opt, k) =>
-                                                    <Menu.Item key={k} icon={opt.icon}>
-                                                        {opt.title}
-                                                    </Menu.Item>)
-                                            }
-                                        </SubMenu>
-                                        : <Menu.Item key={i} icon={icon}>{title}</Menu.Item>
-                                })
-                            }
-                        </Menu>
-                    }
-                </Sider>
                 <Layout>
                     <PageHeader
                         className="site-page-header"
                         onBack={() => null}
-                        title="Title"
+                        title="UserList"
                         subTitle="This is a subtitle"
                         extra={[
-                            <Switch
-                                key={1}
-                                defaultChecked={global.theme === "dark"}
-                                checkedChildren="dark"
-                                unCheckedChildren="light"
-                                onChange={changeTheme}
+                            <SyncOutlined
+                                spin={!state.userList}
+                                onClick={() => setState({type: "reset", default: userListState})}
+                            />,
+                            <Button
+                                style={!!state.editItem ? {transform: "rotate(45deg)"} : {}}
+                                danger={!!state.editItem}
+                                type="primary"
+                                shape="circle"
+                                icon={<PlusOutlined/>}
+                                size="large"
+                                onClick={() => setState({type: "addItem", val: !!state.editItem ? undefined : {}})}
                             />
                         ]}
                     />
                     <Content style={{margin: '0 16px'}}>
-                        <Breadcrumb style={{margin: '16px 0'}}>
-                            <Breadcrumb.Item>User</Breadcrumb.Item>
-                            <Breadcrumb.Item>Bill</Breadcrumb.Item>
-                        </Breadcrumb>
                         <div className="site-layout-background" style={{padding: 24, minHeight: 360}}>
-                            Bill is a cat.
+                            {
+                                state.editItem &&
+                                <UserForm user={state.editItem} setState={setState}/>
+                            }
+                            {
+                                (
+                                    state.userList &&
+                                    <UserList
+                                        dataSource={state.userList}
+                                        pageSize={state.pageSize}
+                                        setState={setState}
+                                        state={state}
+                                    />
+                                ) ||
+                                <Skeleton active/>
+                            }
                         </div>
                     </Content>
-                    <Footer style={{textAlign: 'center'}}>5000</Footer>
+                    <Footer style={{textAlign: 'center'}}>&nbsp;</Footer>
                 </Layout>
             </Layout>
         }
